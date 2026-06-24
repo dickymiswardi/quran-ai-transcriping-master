@@ -22,72 +22,110 @@ class VerseMatchingStep(PipelineStep):
         ctn = context.combined_transcription_normalized
         self.logger.info(f"Matching verses for transcription ({len(ctn)} chars)...")
         
-        results = qal.search_sliding_window(ctn)
+        bounds = getattr(context, 'config', {}).get('manual_bounds')
         
-        if not results:
-            self.logger.warning("No verse matches found")
-            context.matched_verses = []
-            context.match_similarity = 0.0
-            context.match_boundaries = {}
-            return context
-        
-        best_match = max(results, key=lambda r: r.similarity)
-        sorted_best_match = sorted(best_match.verses, key=lambda v: (v.surah_number, v.ayah_number))
-        
-        if ctn.startswith("بسم الله الرحمن الرحيم"):
-            basmalah_index = None
-            for i, verse in enumerate(sorted_best_match):
-                if verse.is_basmalah:
-                    basmalah_index = i
-                    break
-            if basmalah_index is not None:
-                sorted_best_match = sorted_best_match[basmalah_index:]
-        
-        best_match.verses = sorted_best_match
-        
-        matched_ayahs = []
-        for verse in best_match.verses:
-            matched_ayahs.append({
-                'surah_number': verse.surah_number,
-                'ayah_number': verse.ayah_number,
-                'text': verse.text,
-                'text_normalized': verse.text_normalized,
-                'is_basmalah': verse.is_basmalah
-            })
+        if bounds:
+            self.logger.info(f"Using manual bounds: {bounds}")
+            verses_in_range = []
             
-        match_boundaries = {
-            'start_surah': best_match.start_surah,
-            'start_ayah': best_match.start_ayah,
-            'start_word': best_match.start_word,
-            'end_surah': best_match.end_surah,
-            'end_ayah': best_match.end_ayah,
-            'end_word': best_match.end_word
-        }
-        
-        context.matched_verses = best_match.verses
-        context.matched_ayahs = matched_ayahs
-        context.match_similarity = best_match.similarity
-        context.match_boundaries = match_boundaries
-        context.matched_text = best_match.matched_text
-        context.query_text = best_match.query_text
-        
-        cleaned_transcriptions = context.cleaned_transcriptions
-        
-        verses_in_range = []
-        for verse in best_match.verses:
-            verse_position = (verse.surah_number, verse.ayah_number)
-            start_position = (match_boundaries['start_surah'], match_boundaries['start_ayah'])
-            end_position = (match_boundaries['end_surah'], match_boundaries['end_ayah'])
+            # Dapatkan seluruh ayat dalam database QAL
+            all_verses = []
+            for s in range(1, 115):
+                a = 1
+                while True:
+                    try:
+                        v = qal.get_verse(s, a)
+                        if v:
+                            all_verses.append(v)
+                            a += 1
+                        else:
+                            break
+                    except:
+                        break
+                        
+            start_s = bounds['start_surah']
+            start_a = bounds['start_ayah']
+            end_s = bounds['end_surah']
+            end_a = bounds['end_ayah']
             
-            if start_position <= verse_position <= end_position:
-                verses_in_range.append({
-                    'text_normalized': verse.text_normalized,
+            for v in all_verses:
+                v_pos = (v.surah_number, v.ayah_number)
+                if (start_s, start_a) <= v_pos <= (end_s, end_a):
+                    verses_in_range.append({
+                        'text_normalized': v.text_normalized,
+                        'surah_number': v.surah_number,
+                        'ayah_number': v.ayah_number,
+                        'text': v.text,
+                        'is_basmalah': v.is_basmalah,
+                        'word_count': len(v.text_normalized.split())
+                    })
+                    
+        else:
+            # AUTO DETECTION
+            results = qal.search_sliding_window(ctn)
+            
+            if not results:
+                self.logger.warning("No verse matches found")
+                context.matched_verses = []
+                context.match_similarity = 0.0
+                context.match_boundaries = {}
+                return context
+            
+            best_match = max(results, key=lambda r: r.similarity)
+            sorted_best_match = sorted(best_match.verses, key=lambda v: (v.surah_number, v.ayah_number))
+            
+            if ctn.startswith("بسم الله الرحمن الرحيم"):
+                basmalah_index = None
+                for i, verse in enumerate(sorted_best_match):
+                    if verse.is_basmalah:
+                        basmalah_index = i
+                        break
+                if basmalah_index is not None:
+                    sorted_best_match = sorted_best_match[basmalah_index:]
+            
+            best_match.verses = sorted_best_match
+            
+            matched_ayahs = []
+            for verse in best_match.verses:
+                matched_ayahs.append({
                     'surah_number': verse.surah_number,
                     'ayah_number': verse.ayah_number,
                     'text': verse.text,
-                    'is_basmalah': verse.is_basmalah,
-                    'word_count': len(verse.text_normalized.split())
+                    'text_normalized': verse.text_normalized,
+                    'is_basmalah': verse.is_basmalah
                 })
+                
+            match_boundaries = {
+                'start_surah': best_match.start_surah,
+                'start_ayah': best_match.start_ayah,
+                'start_word': best_match.start_word,
+                'end_surah': best_match.end_surah,
+                'end_ayah': best_match.end_ayah,
+                'end_word': best_match.end_word
+            }
+            
+            context.matched_verses = best_match.verses
+            context.matched_ayahs = matched_ayahs
+            context.match_similarity = best_match.similarity
+            context.match_boundaries = match_boundaries
+            context.matched_text = best_match.matched_text
+            context.query_text = best_match.query_text
+            
+            verses_in_range = []
+            for verse in best_match.verses:
+                verse_position = (verse.surah_number, verse.ayah_number)
+                start_position = (match_boundaries['start_surah'], match_boundaries['start_ayah'])
+                end_position = (match_boundaries['end_surah'], match_boundaries['end_ayah'])
+                
+                if start_position <= verse_position <= end_position:
+                    verses_in_range.append({
+                        'text_normalized': verse.text_normalized,
+                        'surah_number': verse.surah_number,
+                        'ayah_number': verse.ayah_number,
+                        'text': verse.text,
+                        'is_basmalah': verse.is_basmalah,
+                        'word_count': len(verse.text_normalized.split())
+                    })
         
         # BOUNDARY DETECTION ALGORITHM (START WORD -> END WORD)
         combined_words = []
