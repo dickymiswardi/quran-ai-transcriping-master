@@ -4,6 +4,6 @@ Silence Splitting Step
 """
 from app.pipeline.base import PipelineStep, PipelineContext
 class SilenceSplittingStep(PipelineStep):
-    def __init__(self): super().__init__()
+    def __init__(self, *args, **kwargs): super().__init__()
     def validate_input(self, context: PipelineContext) -> bool: return True
     def process(self, context: PipelineContext) -> PipelineContext: return context
