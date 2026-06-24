@@ -134,6 +134,10 @@ class VerseMatchingStep(PipelineStep):
                     best_end_idx = i
                 if score > 85: break
                 
+            if best_start_idx >= len(combined_words) or best_end_idx >= len(combined_words):
+                self.logger.warning(f"Kata tidak cukup untuk memetakan {verse_key}. Menghentikan pencarian batas ayat.")
+                break
+
             start_time = combined_words[best_start_idx]['start_time']
             end_time = combined_words[best_end_idx]['end_time']
             
