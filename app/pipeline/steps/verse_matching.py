@@ -128,6 +128,7 @@ class VerseMatchingStep(PipelineStep):
                     })
         
         # BOUNDARY DETECTION ALGORITHM (START WORD -> END WORD)
+        cleaned_transcriptions = context.cleaned_transcriptions
         combined_words = []
         for chunk in cleaned_transcriptions:
             words = chunk.get('normalized_text', '').split()
